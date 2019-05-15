@@ -107,4 +107,4 @@ if __name__ == "__main__":
 	calibrate()
 	for a in range(500):
 		print(read_relative())
-		sleep(1/50)
+		sleep(1/25)
