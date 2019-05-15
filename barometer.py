@@ -57,9 +57,9 @@ def initialise():
 	if bus.read_byte_data(LPS, LPS_WHOAMI_ADDRESS) != LPS_WHOAMI_CONTENTS:
 		raise Exception("LPS not found at address {}.".format(LPS))
 	else:
-		print("Barometer set up.")
 		# Enable barometer and set ODR 25 Hz
 		bus.write_byte_data(LPS, LPS_CTRL_1, 0b11000000)
+		print("Barometer set up.")
 
 
 ########################################################################
