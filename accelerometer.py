@@ -65,34 +65,49 @@ def initialise():
 		print("Accelerometer/magnetometer set up.")
 
 ########################################################################
-## Read functions ##
-####################
-
-def read_accelerometer():
-	global bus
-	x_L = bus.read_byte_data(LSM, LSM_ACC_X_L)
-	x_H = bus.read_byte_data(LSM, LSM_ACC_X_H)
-	y_L = bus.read_byte_data(LSM, LSM_ACC_Y_L)
-	y_H = bus.read_byte_data(LSM, LSM_ACC_Y_H)
-	z_L = bus.read_byte_data(LSM, LSM_ACC_Z_L)
-	z_H = bus.read_byte_data(LSM, LSM_ACC_Z_H)
-	x = x_H << 8 | x_L
-	y = y_H << 8 | y_L
-	z = z_H << 8 | z_L
-	return (x, y, z)
-
-def read_magnetometer():
-	global bus
-	x_L = bus.read_byte_data(LSM, LSM_MAG_X_L)
-	x_H = bus.read_byte_data(LSM, LSM_MAG_X_H)
-	y_L = bus.read_byte_data(LSM, LSM_MAG_Y_L)
-	y_H = bus.read_byte_data(LSM, LSM_MAG_Y_H)
-	z_L = bus.read_byte_data(LSM, LSM_MAG_Z_L)
-	z_H = bus.read_byte_data(LSM, LSM_MAG_Z_H)
-	x = x_H << 8 | x_L
-	y = y_H << 8 | y_L
-	z = z_H << 8 | z_L
-	return (x, y, z)
+## Acceleromter Class ##
+########################
+class Accelerometer:
+	def __init__(self, bus):
+		self.bus = bus
+		if self.bus.read_byte_data(LSM, LSM_WHOAMI_ADDRESS) != LSM_WHOAMI_CONTENTS:
+			raise Exception("LSM not found at address {}.".format(LSM))
+		else:
+			# Enable accelerometer axes and set ODR (output data rate) = 50 Hz
+			self.bus.write_byte_data(LSM, LSM_CTRL_1, 0b01010111)
+			# Set acceleration full-scale to +/-2g
+			self.bus.write_byte_data(LSM, LSM_CTRL_2, 0b00000000)
+			# Disable thermometer, set magnetic resolution high, ODR 50Hz
+			self.bus.write_byte_data(LSM, LSM_CTRL_5, 0b01110000)
+			# Set magnetic full-scale to +/- 4 gauss
+			self.bus.write_byte_data(LSM, LSM_CTRL_6, 0b00100000)
+			# Set magnetometer low power mode off
+			self.bus.write_byte_data(LSM, LSM_CTRL_7, 0b00000000)
+			print("Accelerometer/magnetometer set up.")
+				
+	def read_acc(self):
+		x_L = self.bus.read_byte_data(LSM, LSM_ACC_X_L)
+		x_H = self.bus.read_byte_data(LSM, LSM_ACC_X_H)
+		y_L = self.bus.read_byte_data(LSM, LSM_ACC_Y_L)
+		y_H = self.bus.read_byte_data(LSM, LSM_ACC_Y_H)
+		z_L = self.bus.read_byte_data(LSM, LSM_ACC_Z_L)
+		z_H = self.bus.read_byte_data(LSM, LSM_ACC_Z_H)
+		self.accx = x_H << 8 | x_L
+		self.accy = y_H << 8 | y_L
+		self.accz = z_H << 8 | z_L
+		return (self.accx, self.accy, self.accz)
+	
+	def read_mag(self):
+		x_L = self.bus.read_byte_data(LSM, LSM_MAG_X_L)
+		x_H = self.bus.read_byte_data(LSM, LSM_MAG_X_H)
+		y_L = self.bus.read_byte_data(LSM, LSM_MAG_Y_L)
+		y_H = self.bus.read_byte_data(LSM, LSM_MAG_Y_H)
+		z_L = self.bus.read_byte_data(LSM, LSM_MAG_Z_L)
+		z_H = self.bus.read_byte_data(LSM, LSM_MAG_Z_H)
+		self.magx = x_H << 8 | x_L
+		self.magy = y_H << 8 | y_L
+		self.magz = z_H << 8 | z_L
+		return (self.magx, self.magy, self.magz)
 	
 ########################################################################
 ## Main ##
@@ -104,10 +119,16 @@ if __name__ == "__main__":
 	# Initialise the i2c bus
 	I2CBUS_NUMBER = 1
 	bus = SMBus(I2CBUS_NUMBER)
-	initialise()
-	for a in range(500):
-		print(read_accelerometer())
-		print(read_magnetometer())
-		print("")
-		sleep(1/50)
+	
+	# Initialise the accelerometer
+	accelerometer1 = Accelerometer(bus)
+	
+	try:
+		while True:
+			print(accelerometer1.read_acc())
+			print(accelerometer1.read_mag())
+			print("")
+			sleep(1/50)
+	except KeyboardInterrupt:
+		print("Exiting...")
 

@@ -117,8 +117,11 @@ class GPSSensorThread(Thread):
 
 if __name__ == '__main__':
 	from time import sleep
+	
+	# Initialise the gps
 	gps1 = GPSSensorThread()
 	gps1.start()
+	
 	try:
 		while True:
 			print(gps1.mode, # 0=no mode value yet seen, 1=no fix, 2=2D, 3=3D

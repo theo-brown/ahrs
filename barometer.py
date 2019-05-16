@@ -4,11 +4,6 @@
 import numpy as np
 
 ########################################################################
-## Global variables ##
-######################
-zero_value = 0
-
-########################################################################
 ## LPS331AP register addresses ##
 #################################
 # For reference see www.pololu.com/file/0J622/LPS331AP.pdf
@@ -49,49 +44,49 @@ LPS_TEMP_OUT_H = 0x2C # MSB
 LPS_AMP_CTRL = 0x30
 
 ########################################################################
-## Initialisation functions ##
-##############################
-
-def initialise():
-	global bus
-	if bus.read_byte_data(LPS, LPS_WHOAMI_ADDRESS) != LPS_WHOAMI_CONTENTS:
-		raise Exception("LPS not found at address {}.".format(LPS))
-	else:
-		# Enable barometer and set ODR 25 Hz
-		bus.write_byte_data(LPS, LPS_CTRL_1, 0b11000000)
-		print("Barometer set up.")
-
-
-########################################################################
-## Read functions ##
-####################
-
-def read_raw():
-	global bus
-	# Read from registers
-	pressure_XL = bus.read_byte_data(LPS, LPS_PRESS_OUT_XL)
-	pressure_L = bus.read_byte_data(LPS, LPS_PRESS_OUT_L)
-	pressure_H = bus.read_byte_data(LPS, LPS_PRESS_OUT_H)
-	# Convert to bytes
-	pressure_b = pressure_H << 16 | pressure_L << 8 | pressure_XL
-	return pressure_b
-
-def calibrate():
-	global bus
-	global zero_value
-	num_datapoints = 1000
-	calibration_data = np.zeros(num_datapoints)
-	print("Calibrating barometer...")
-	print("Place the sensor on the ground.")
-	for i in np.arange(num_datapoints):
-		calibration_data[i] = read_raw()
-	print("Calibration successful.")
-	zero_value = int(np.mean(calibration_data))
-
-def read_relative():
-	global bus, zero_value
-	return read_raw() - zero_value
-
+## Barometer class ##
+#####################
+class Barometer:
+	def __init__(self, bus):
+		self.bus = bus
+		self.calibration_num_datapoints = 1000
+		self.calibration_value = 0
+		if self.bus.read_byte_data(LPS, LPS_WHOAMI_ADDRESS) != LPS_WHOAMI_CONTENTS:
+			raise Exception("LPS not found at address {}.".format(LPS))
+		else:
+			# Enable barometer and set ODR 25 Hz
+			self.bus.write_byte_data(LPS, LPS_CTRL_1, 0b11000000)
+			print("Barometer set up.")
+	
+	def read(self):
+		# Read from registers
+		pressure_XL = self.bus.read_byte_data(LPS, LPS_PRESS_OUT_XL)
+		pressure_L = self.bus.read_byte_data(LPS, LPS_PRESS_OUT_L)
+		pressure_H = self.bus.read_byte_data(LPS, LPS_PRESS_OUT_H)
+		# Convert to bytes
+		# Update stored pressure values
+		self.pressure = pressure_H << 16 | pressure_L << 8 | pressure_XL
+		self.normalised_pressure = self.pressure - self.calibration_value
+		# Return un-normalised value
+		return self.pressure
+	
+	def read_normalised(self):
+		# Update the stored pressure values
+		self.read()
+		# Return the normalised pressure value
+		return self.normalised_pressure
+	
+	def calibrate(self):
+		calibration_data = np.zeros(self.calibration_num_datapoints)
+		print("Calibrating barometer...")
+		print("Place the sensor on the ground.")
+		for i in np.arange(self.calibration_num_datapoints):
+			calibration_data[i] = self.read()
+		# Calculate average value (TODO: replace with a fancy filter)
+		self.calibration_value = int(np.mean(calibration_data))
+		# Update stored values
+		self.read()
+		print("Calibration successful.")
 
 ########################################################################
 ## Main ##
@@ -103,8 +98,14 @@ if __name__ == "__main__":
 	# Initialise the i2c bus
 	I2CBUS_NUMBER = 1
 	bus = SMBus(I2CBUS_NUMBER)
-	initialise()
-	calibrate()
-	for a in range(500):
-		print(read_relative())
-		sleep(1/25)
+	
+	# Initialise the barometer
+	barometer1 = Barometer(bus)
+	barometer1.calibrate()
+
+	try:
+		while True:
+			print(barometer1.read_normalised())
+			sleep(1/25)
+	except KeyboardInterrupt:
+		print("Exiting...")

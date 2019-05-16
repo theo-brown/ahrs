@@ -34,36 +34,31 @@ LGD_OUT_Z_H = 0x2D
 
 # For further control registers (FIFO, interrupts, etc), see datasheet
 
-########################################################################
-## Initialisation functions ##
-##############################
-
-def initialise():
-	global bus
-	if bus.read_byte_data(LGD, LGD_WHOAMI_ADDRESS) != LGD_WHOAMI_CONTENTS:
-		raise Exception("LGD not found at address {}.".format(LGD))
-	else:
-		# Enable gyro axes and set ODR 50Hz
-		bus.write_byte_data(LGD, LGD_CTRL_1, 0b10001111)
-		print("Gyroscope set up.")
-
 
 ########################################################################
-## Read functions ##
-####################
+## Gyroscope Class ##
+#####################
+class Gyroscope:
+	def __init__(self, bus):
+		self.bus = bus
+		if self.bus.read_byte_data(LGD, LGD_WHOAMI_ADDRESS) != LGD_WHOAMI_CONTENTS:
+			raise Exception("LGD not found at address {}.".format(LGD))
+		else:
+			# Enable gyro axes and set ODR 50Hz
+			self.bus.write_byte_data(LGD, LGD_CTRL_1, 0b10001111)
+			print("Gyroscope set up.")
 
-def read():
-	global bus
-	x_L = bus.read_byte_data(LGD, LGD_OUT_X_L)
-	x_H = bus.read_byte_data(LGD, LGD_OUT_X_H)
-	y_L = bus.read_byte_data(LGD, LGD_OUT_Y_L)
-	y_H = bus.read_byte_data(LGD, LGD_OUT_Y_H)
-	z_L = bus.read_byte_data(LGD, LGD_OUT_Z_L)
-	z_H = bus.read_byte_data(LGD, LGD_OUT_Z_H)
-	x = x_H << 8 | x_L
-	y = y_H << 8 | y_L
-	z = z_H << 8 | z_L
-	return (x, y, z)
+	def read(self):
+		x_L = self.bus.read_byte_data(LGD, LGD_OUT_X_L)
+		x_H = self.bus.read_byte_data(LGD, LGD_OUT_X_H)
+		y_L = self.bus.read_byte_data(LGD, LGD_OUT_Y_L)
+		y_H = self.bus.read_byte_data(LGD, LGD_OUT_Y_H)
+		z_L = self.bus.read_byte_data(LGD, LGD_OUT_Z_L)
+		z_H = self.bus.read_byte_data(LGD, LGD_OUT_Z_H)
+		self.x = x_H << 8 | x_L
+		self.y = y_H << 8 | y_L
+		self.z = z_H << 8 | z_L
+		return (self.x, self.y, self.z)
 	
 ########################################################################
 ## Main ##
@@ -75,8 +70,14 @@ if __name__ == "__main__":
 	# Initialise the i2c bus
 	I2CBUS_NUMBER = 1
 	bus = SMBus(I2CBUS_NUMBER)
-	initialise()
-	for a in range(500):
-		print(read())
-		sleep(1/50)
+	
+	# Initialise the gyroscope
+	gyroscope1 = Gyroscope(bus)
+	
+	try:
+		while True:
+			print(gyroscope1.read())
+			sleep(1/50)
+	except KeyboardInterrupt:
+		print("Exiting...")
 
