@@ -25,6 +25,7 @@ wheels/
 *.egg
 include/
 share/
+bin/
 MANIFEST
 
 # PyInstaller
