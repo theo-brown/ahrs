@@ -44,27 +44,6 @@ LSM_TEMP_H = 0x06
 # etc), see datasheet
 
 ########################################################################
-## Initialisation functions ##
-##############################
-
-def initialise():
-	global bus
-	if bus.read_byte_data(LSM, LSM_WHOAMI_ADDRESS) != LSM_WHOAMI_CONTENTS:
-		raise Exception("LSM not found at address {}.".format(LSM))
-	else:
-		# Enable accelerometer axes and set ODR (output data rate) = 50 Hz
-		bus.write_byte_data(LSM, LSM_CTRL_1, 0b01010111)
-		# Set acceleration full-scale to +/-2g
-		bus.write_byte_data(LSM, LSM_CTRL_2, 0b00000000)
-		# Disable thermometer, set magnetic resolution high, ODR 50Hz
-		bus.write_byte_data(LSM, LSM_CTRL_5, 0b01110000)
-		# Set magnetic full-scale to +/- 4 gauss
-		bus.write_byte_data(LSM, LSM_CTRL_6, 0b00100000)
-		# Set magnetometer low power mode off
-		bus.write_byte_data(LSM, LSM_CTRL_7, 0b00000000)
-		print("Accelerometer/magnetometer set up.")
-
-########################################################################
 ## Acceleromter Class ##
 ########################
 class Accelerometer:
