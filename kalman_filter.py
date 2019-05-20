@@ -73,7 +73,7 @@ if __name__=='__main__':
 	import numpy as np
 	
 	filt = KalmanFilter(0, 1, 1, 0, 1, 1e-5, 1)
-	n = 50
+	n = 100
 	x = -0.37727
 	z = np.random.normal(x, 0.1, size=n)
 	x_out = np.zeros(n)
@@ -90,12 +90,12 @@ if __name__=='__main__':
 	plt.title("Estimate of x")
 	plt.xlabel('Iteration')
 	plt.ylabel('Value')
-	
+
 	plt.figure()
 	plt.plot(P[1:])
 	plt.title("Estimated a priori error")
 	plt.xlabel('Iteration')
 	plt.ylabel('Error')
-	
+
 	plt.show()
 	
