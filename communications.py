@@ -8,6 +8,14 @@ import numpy as np
 ########################################################################
 ## Data encoding ##
 ###################
+# Packet format
+# '!BBii....c'
+#
+# !: Set network byte alignment
+# B: Source byte (see DATA_SOURCE_BYTES)
+# B: Length byte (number of integers in data)
+# i..: Data (integers)
+# c: end packet byte (END_BYTE)
 
 ACCELEROMETER_ID = 1
 GYROSCOPE_ID = 2
@@ -15,59 +23,37 @@ GPS_ID = 3
 BAROMETER_ID = 4
 DATA_SOURCE_BYTES = [ACCELEROMETER_ID, GYROSCOPE_ID, GPS_ID, BAROMETER_ID]
 
-# The maximum size of an individual packet
-MAX_PACKET_SIZE = 1024
-# The maximum number of ints encoded by an individual packet
-#  = 255 as the number of ints is encoded by the single length byte (max value 255)
-MAX_NUM_INTS = 255
+END_BYTE = b','
+
+READ_BUFFER_SIZE = 1024
 
 def encode(data_source, data):
-    # Packet format
-    # '!BBii....'
-    #
-    # !: Set network byte alignment
-    # B: Source byte (see DATA_SOURCE_BYTES)
-    # B: Length byte - gives the number of integers that follow in data
-    # i..: Data (of the number of integers given by length byte)
-
     # Set source byte
     if data_source in DATA_SOURCE_BYTES:
         source_byte = data_source
     else:
         raise Exception("Data source {} not recognised (must be one of {})".format(data_source, DATA_SOURCE_BYTES))
 
-    # Set length byte
-    length_byte = data.size
-    if length_byte > MAX_NUM_INTS:
-       raise Exception("Data is too long ({} ints > max number of ints, {})".format(length_byte, MAX_NUM_INTS))
-
-    # Create format string: '!BBiiiii...'
-    format_string = '!BB' + length_byte*'i'
-    # Assemble packet ('\xSS\xLL\xDDDDD..')
-    if length_byte > 1:
-        packet = struct.pack(format_string, source_byte, length_byte, *data)
+    # Create format string: '!BBiiiii...c'
+    format_string = '!BB' + data.size*'i' + 'c'
+    # Assemble packet
+    if data.size > 1:
+        packet = struct.pack(format_string, source_byte, data.size, *data, END_BYTE)
     else:
-        packet = struct.pack(format_string, source_byte, length_byte, data)
-
-    if struct.calcsize(format_string) > MAX_PACKET_SIZE:
-        raise Exception("Packet too long ({} bits > max packet size {} bits)".format(struct.calcsize(format_string), MAX_PACKET_SIZE))
+        packet = struct.pack(format_string, source_byte, data.size, data, END_BYTE)
 
     return packet
 
-def decode(buffer):
-    # Packet format
-    # '!BBii....'
-    #
-    # !: Set network byte alignment
-    # B: Source byte (see DATA_SOURCE_BYTES)
-    # B: Length byte - gives the number of integers that follow in data
-    # i..: Data (of the number of integers given by length byte)
-
-    # Second byte is data length
+def decode(packet):
+    # Find the length byte (the second byte)
     length = packet[1]
     # Extract the data
-    format_string = '!BB' + 'i'*length
-    source, length, data = struct.unpack(format_string, packet)
+    if packet[-1] == END_BYTE:
+        format_string = '!BB' + 'i'*length + 'c'
+        source, length, data, end_byte = struct.unpack(format_string, packet)
+    else:
+        format_string = '!BB' + 'i'*length
+        source, length, data = struct.unpack(format_string, packet)
 
     return source, length, np.array(data)
 
@@ -98,11 +84,12 @@ class ServerSocket:
        packet = encode(data_source, data)
        self.client.send(packet)
 
-    def receive_packet(self):
-       packet = self.client.recv(MAX_PACKET_SIZE)
-       if packet:
-           return decode(packet)
-
+    def receive(self):
+       buffer = self.client.recv(READ_BUFFER_SIZE)
+       if buffer:
+           packets = buffer.split(END_BYTE)
+           decoded_packets = np.asarray([decode(packet) for packet in packets if packet])
+           return decoded_packets
 
 ########################################################################
 ## Client socket ##
@@ -123,10 +110,12 @@ class ClientSocket:
        packet = encode(data_source, data)
        self.server.send(packet)
 
-    def receive_packet(self):
-       packet = self.server.recv(MAX_PACKET_SIZE)
-       if packet:
-           return decode(packet)
+    def receive(self):
+       buffer = self.server.recv(READ_BUFFER_SIZE)
+       if buffer:
+           packets = buffer.split(END_BYTE)
+           decoded_packets = np.asarray([decode(packet) for packet in packets if packet])
+           return decoded_packets
 
 
 if __name__ == '__main__':
@@ -145,6 +134,6 @@ if __name__ == '__main__':
             client = ClientSocket()
             client.connect()
             while True:
-                print(client.receive_packet())
+                print(client.receive())
 
         print("Mode not recognised.")
