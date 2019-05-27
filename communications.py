@@ -9,13 +9,14 @@ import numpy as np
 ## Data encoding ##
 ###################
 # Packet format
-# '!BBii....c'
+# '!BBii....'
 #
 # !: Set network byte alignment
-# B: Source byte (see DATA_SOURCE_BYTES)
-# B: Length byte (number of integers in data)
+# B: Packet length byte
+# B: Data source byte (see DATA_SOURCE_BYTES)
 # i..: Data (integers)
-# c: end packet byte (END_BYTE)
+HEADER_FORMAT = '!BB'
+HEADER_LENGTH = len(HEADER_FORMAT) - 1 # -1 as the ! is formatting rather than transmitted data
 
 ACCELEROMETER_ID = 1
 GYROSCOPE_ID = 2
@@ -23,7 +24,7 @@ GPS_ID = 3
 BAROMETER_ID = 4
 DATA_SOURCE_BYTES = [ACCELEROMETER_ID, GYROSCOPE_ID, GPS_ID, BAROMETER_ID]
 
-END_BYTE = b','
+INT_SIZE = 4 # Number of bytes used to store an int
 
 READ_BUFFER_SIZE = 1024
 
@@ -34,106 +35,134 @@ def encode(data_source, data):
     else:
         raise Exception("Data source {} not recognised (must be one of {})".format(data_source, DATA_SOURCE_BYTES))
 
-    # Create format string: '!BBiiiii...c'
-    format_string = '!BB' + data.size*'i' + 'c'
+    # Create format string: '!BBiiiii...'
+    format_string = HEADER_FORMAT + data.size*'i'
+
     # Assemble packet
     if data.size > 1:
-        packet = struct.pack(format_string, source_byte, data.size, *data, END_BYTE)
+        packet = struct.pack(format_string, data.size*INT_SIZE+HEADER_LENGTH, source_byte, *data)
     else:
-        packet = struct.pack(format_string, source_byte, data.size, data, END_BYTE)
+        packet = struct.pack(format_string, data.size*INT_SIZE+HEADER_LENGTH, source_byte, data)
 
     return packet
 
 def decode(packet):
-    # Find the length byte (the second byte)
-    length = packet[1]
-    # Extract the data
-    if packet[-1] == END_BYTE:
-        format_string = '!BB' + 'i'*length + 'c'
-        source, length, data, end_byte = struct.unpack(format_string, packet)
-    else:
-        format_string = '!BB' + 'i'*length
-        source, length, data = struct.unpack(format_string, packet)
+    if packet:
+        # Find the length of the data byte (the first byte minus the header length)
+        number_of_ints = (packet[0] - HEADER_LENGTH)//INT_SIZE
+        # Extract the data
+        format_string = HEADER_FORMAT + 'i'*number_of_ints
+        packet_length, data_source, data = struct.unpack(format_string, packet)
 
-    return source, length, np.array(data)
+        return packet_length, data_source, np.array(data)
 
+########################################################################
+## Streaming socket ##
+######################
+class StreamingSocket:
+    def __init__(self):
+        self.part_packet = b''
+        self.read_buffer = b''
+
+        self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+
+        # Default connection is the socket itself (client mode)
+        # For server mode, set self.connection = self.socket.accept()[0]
+        self.connection = self.socket
+
+    def read(self):
+        self.buffer = self.connection.recv(READ_BUFFER_SIZE)
+        self.received_packets = []
+        while self.buffer:
+            self.received_packets.append(decode(self.read_packet_from_buffer()))
+        return self.received_packets
+
+    def read_packet_from_buffer(self):
+        # If the buffer's empty, return empty
+        if not self.buffer:
+            return b''
+
+        # Append any existing part packet to the beginning of the buffer
+        if self.part_packet:
+            self.buffer = b''.join([self.part_packet, self.buffer])
+            # Clear the part_packet variable
+            self.part_packet = b''
+
+        # Extract the length of the first packet from the buffer
+        packet_length = self.buffer[0]
+
+        # If the whole packet is in the buffer, extract it
+        if len(self.buffer) >= packet_length:
+            # Remove the packet from the buffer
+            packet = self.buffer[0:packet_length]
+            self.buffer = self.buffer[packet_length:]
+            return packet
+
+        else:
+            # Save the part packet for later
+            self.part_packet = self.buffer
+            # Empty the buffer
+            self.buffer = b''
+            # Return empty
+            return b''
+
+    def write(self, data_source, data):
+        packet = encode(data_source, data)
+        self.connection.send(packet)
+
+    def connect(self):
+        return
 
 ########################################################################
 ## Server socket ##
 ###################
-class ServerSocket:
+class ServerSocket(StreamingSocket):
     def __init__(self, port=12345):
+        super().__init__()
         self.port = port
+        self.socket.bind(('', self.port))
+        self.socket.listen()
 
-        # Create a server socket
-        self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        # Allow reuse of the address
-        self.server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        # Bind the socket to the port
-        self.server_socket.bind(('', self.port))
-        # Listen for connections
-        self.server_socket.listen()
-
-    def wait_for_client_connection(self):
+    def connect(self):
         # Connect to a client
         print("Waiting for client connection...")
-        self.client, self.client_address = self.server_socket.accept()
-        print("Connected to client at {}".format(self.client_address))
+        self.connection, self.client_address = self.socket.accept()
+        print("Socket connected to client at {}".format(self.client_address))
 
-    def send_packet(self, data_source, data):
-       packet = encode(data_source, data)
-       self.client.send(packet)
-
-    def receive(self):
-       buffer = self.client.recv(READ_BUFFER_SIZE)
-       if buffer:
-           packets = buffer.split(END_BYTE)
-           decoded_packets = np.asarray([decode(packet) for packet in packets if packet])
-           return decoded_packets
 
 ########################################################################
 ## Client socket ##
 ###################
-class ClientSocket:
+class ClientSocket(StreamingSocket):
     def __init__(self, server_address='192.168.42.1', server_port=12345):
-        self.server_address = server_address
+        super().__init__()
         self.server_port = server_port
-
-        # Create the socket for connecting to the server
-        self.server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        self.server_address = server_address
 
     def connect(self):
-        self.server.connect((self.server_address, self.server_port))
+        self.socket.connect((self.server_address, self.server_port))
+        print("Socket connected to server at {}:{}".format(self.server_address, self.server_port))
 
-    def send_packet(self, data_source, data):
-       packet = encode(data_source, data)
-       self.server.send(packet)
-
-    def receive(self):
-       buffer = self.server.recv(READ_BUFFER_SIZE)
-       if buffer:
-           packets = buffer.split(END_BYTE)
-           decoded_packets = np.asarray([decode(packet) for packet in packets if packet])
-           return decoded_packets
-
-
-if __name__ == '__main__':
+########################################################################
+if __name__=='__main__':
     while True:
         mode = input("Select mode [s]erver/[c]lient: ")
 
         if mode == 's':
             server = ServerSocket()
-            server.wait_for_client_connection()
+            server.connect()
             a = 1
             while True:
-               server.send_packet(ACCELEROMETER_ID, np.asarray(a))
+               print(server.write(ACCELEROMETER_ID, np.asarray(a)))
                a = (a+1) % 32768
+               print(server.read())
 
         elif mode == 'c':
             client = ClientSocket()
             client.connect()
             while True:
-                print(client.receive())
+                print(client.read())
+                print(client.write(GYROSCOPE_ID, np.asarray(1)))
 
         print("Mode not recognised.")
