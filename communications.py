@@ -1,22 +1,25 @@
 import socket
-from time import sleep
-from threading import Thread
 import struct
 import numpy as np
-
+import errno
+import time
 
 ########################################################################
 ## Data encoding ##
 ###################
 # Packet format
-# '!BBii....'
+# '!BBff....'
 #
 # !: Set network byte alignment
 # B: Packet length byte
 # B: Data source byte (see DATA_SOURCE_BYTES)
-# i..: Data (integers)
+# f..: Data (floats)
 HEADER_FORMAT = '!BB'
-HEADER_LENGTH = len(HEADER_FORMAT) - 1 # -1 as the ! is formatting rather than transmitted data
+HEADER_LENGTH = len(HEADER_FORMAT) - 1  # -1 as the ! is formatting rather than transmitted data
+
+PACKET_LENGTH_BYTE = 0  # Location of packet length byte
+DATA_SOURCE_BYTE = 1  # Location of data source byte
+FIRST_DATA_BYTE = 2  # Location of first data byte
 
 ACCELEROMETER_ID = 1
 GYROSCOPE_ID = 2
@@ -24,37 +27,61 @@ GPS_ID = 3
 BAROMETER_ID = 4
 DATA_SOURCE_BYTES = [ACCELEROMETER_ID, GYROSCOPE_ID, GPS_ID, BAROMETER_ID]
 
-INT_SIZE = 4 # Number of bytes used to store an int
+VALUE_SIZE = 4  # Number of bytes used to store a float
 
 READ_BUFFER_SIZE = 1024
+
 
 def encode(data_source, data):
     # Set source byte
     if data_source in DATA_SOURCE_BYTES:
         source_byte = data_source
     else:
-        raise Exception("Data source {} not recognised (must be one of {})".format(data_source, DATA_SOURCE_BYTES))
+        raise Exception("Data source {} not recognised (must be one of {})"
+                        .format(data_source, DATA_SOURCE_BYTES))
 
-    # Create format string: '!BBiiiii...'
-    format_string = HEADER_FORMAT + data.size*'i'
+    # If it's a scalar, size is 1
+    if np.ndim(data) == 0:
+        size = 1
+    # If it's an array, grab the size
+    elif isinstance(data, np.ndarray):
+        size = data.size
+    else:
+        raise Exception("Data type not recognised (must be scalar or ndarray)")
+
+    # Create format string: '!BBfffff...'
+    format_string = HEADER_FORMAT + size*'f'
 
     # Assemble packet
-    if data.size > 1:
-        packet = struct.pack(format_string, data.size*INT_SIZE+HEADER_LENGTH, source_byte, *data)
+    if size > 1:
+        # Need to unzip the array
+        packet = struct.pack(format_string,
+                             size*VALUE_SIZE+HEADER_LENGTH,
+                             source_byte,
+                             *data)
     else:
-        packet = struct.pack(format_string, data.size*INT_SIZE+HEADER_LENGTH, source_byte, data)
+        packet = struct.pack(format_string,
+                             size*VALUE_SIZE+HEADER_LENGTH,
+                             source_byte,
+                             data)
 
     return packet
 
+
 def decode(packet):
     if packet:
-        # Find the length of the data byte (the first byte minus the header length)
-        number_of_ints = (packet[0] - HEADER_LENGTH)//INT_SIZE
-        # Extract the data
-        format_string = HEADER_FORMAT + 'i'*number_of_ints
-        packet_length, data_source, data = struct.unpack(format_string, packet)
+        # Extract header data
+        packet_length = packet[PACKET_LENGTH_BYTE]
+        data_source = packet[DATA_SOURCE_BYTE]
 
-        return packet_length, data_source, np.array(data)
+        number_of_values = (packet_length - HEADER_LENGTH)//VALUE_SIZE
+
+        # Extract the data
+        format_string = '!' + 'f'*number_of_values
+        data = struct.unpack(format_string, packet[FIRST_DATA_BYTE:])
+
+        return packet_length, data_source, np.asarray(data)
+
 
 ########################################################################
 ## Streaming socket ##
@@ -72,7 +99,19 @@ class StreamingSocket:
         self.connection = self.socket
 
     def read(self):
-        self.buffer = self.connection.recv(READ_BUFFER_SIZE)
+        try:
+            self.buffer = self.connection.recv(READ_BUFFER_SIZE)
+        except socket.error as e:
+            self.buffer = b''
+            # Connection reset error
+            # TODO: I don't think this works
+            if e.errno == errno.ECONNRESET:
+                print("Connection reset. Attempting to reconnect...")
+                self.connect()
+            # All other errors
+            else:
+                raise
+
         self.received_packets = []
         while self.buffer:
             self.received_packets.append(decode(self.read_packet_from_buffer()))
@@ -90,12 +129,12 @@ class StreamingSocket:
             self.part_packet = b''
 
         # Extract the length of the first packet from the buffer
-        packet_length = self.buffer[0]
+        packet_length = self.buffer[PACKET_LENGTH_BYTE]
 
         # If the whole packet is in the buffer, extract it
         if len(self.buffer) >= packet_length:
             # Remove the packet from the buffer
-            packet = self.buffer[0:packet_length]
+            packet = self.buffer[:packet_length]
             self.buffer = self.buffer[packet_length:]
             return packet
 
@@ -113,6 +152,7 @@ class StreamingSocket:
 
     def connect(self):
         return
+
 
 ########################################################################
 ## Server socket ##
@@ -135,17 +175,38 @@ class ServerSocket(StreamingSocket):
 ## Client socket ##
 ###################
 class ClientSocket(StreamingSocket):
-    def __init__(self, server_address='192.168.42.1', server_port=12345):
+    def __init__(self, server_address='192.168.42.1', server_port=12345,
+                 retry_connection=True, timeout=3):
         super().__init__()
         self.server_port = server_port
         self.server_address = server_address
+        self.retry_connection = retry_connection
+        self.timeout = timeout
 
     def connect(self):
-        self.socket.connect((self.server_address, self.server_port))
-        print("Socket connected to server at {}:{}".format(self.server_address, self.server_port))
+        try:
+            print("Connecting to server...")
+
+            self.socket.connect((self.server_address, self.server_port))
+
+            print("Socket connected to server at {}:{}"
+                  .format(self.server_address, self.server_port))
+
+        except Exception as e:
+            print("Exception ocurred: {}".format(Exception))
+
+            if self.retry_connection:
+                if not hasattr(self, 'start_time'):
+                    self.start_time = time.time()
+
+                print("Retrying.")
+
+                while (time.time() - self.start_time) < self.timeout:
+                    self.connect()
+
 
 ########################################################################
-if __name__=='__main__':
+if __name__ == '__main__':
     while True:
         mode = input("Select mode [s]erver/[c]lient: ")
 
@@ -154,9 +215,9 @@ if __name__=='__main__':
             server.connect()
             a = 1
             while True:
-               print(server.write(ACCELEROMETER_ID, np.asarray(a)))
-               a = (a+1) % 32768
-               print(server.read())
+                print(server.write(ACCELEROMETER_ID, np.asarray(a)))
+                a = (a+1) % 32768
+                print(server.read())
 
         elif mode == 'c':
             client = ClientSocket()
