@@ -19,7 +19,7 @@ DEFAULT_BRUSH = pg.mkBrush(DEFAULT_SPOT_COLOUR)
 ###############################################################################
 class UpdatingDataItem(pg.PlotDataItem):
 
-    def __init__(self, *args, display_buffer_size=1000, **kwargs):
+    def __init__(self, *args, display_buffer_size=100, **kwargs):
         super().__init__(*args, **kwargs)
         self.setSymbolPen(None)
         self.setSymbolBrush(DEFAULT_BRUSH)
