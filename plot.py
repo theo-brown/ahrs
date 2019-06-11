@@ -2,6 +2,9 @@ import pyqtgraph as pg
 from pyqtgraph.Qt import QtCore, QtGui
 import numpy as np
 
+###############################################################################
+## PyQtGraph configuration ##
+#############################
 pg.setConfigOption('background', 'w')
 pg.setConfigOption('foreground', 'k')
 pg.setConfigOption('antialias', True)
@@ -12,8 +15,11 @@ DEFAULT_SPOT_SIZE = 10
 DEFAULT_PEN = pg.mkPen(DEFAULT_LINE_COLOUR, width=DEFAULT_LINE_WIDTH)
 DEFAULT_BRUSH = pg.mkBrush(DEFAULT_SPOT_COLOUR)
 
+
+###############################################################################
 class UpdatingDataItem(pg.PlotDataItem):
-    def __init__(self, *args, **kwargs):
+
+    def __init__(self, *args, display_buffer_size=1000, **kwargs):
         super().__init__(*args, **kwargs)
         self.setSymbolPen(None)
         self.setSymbolBrush(DEFAULT_BRUSH)
@@ -23,19 +29,35 @@ class UpdatingDataItem(pg.PlotDataItem):
             self.setPen(None)
         else:
             self.setPen(DEFAULT_PEN)
+        
+        # If initialised with no data, initialise with a blank buffer
+        if self.getData()[0] is None:
+            self.setData(np.zeros(display_buffer_size), np.zeros(display_buffer_size))
 
     def update_data(self, new_x, new_y):
-        if new_x.size != new_y.size:
-            raise Exception("xData and yData must be the same size")
+        # Check input data and find number of new datapoints
+        # Both scalars?
+        if np.ndim(new_x) == 0 and np.ndim(new_y) == 0:
+            num_new_datapoints = 1
+        # Both arrays?
+        elif isinstance(new_x, np.ndarray) and isinstance(new_y, np.ndarray):
+            if new_x.size != new_y.size:
+                raise Exception("new_x and new_y must be the same size")
+            else:
+                num_new_datapoints = new_x.size
+        else:
+            raise Exception("new_x and new_y must be both scalars or both \
+                            arrays")
+
+        # Get the current data
         x, y = self.getData()
         # Move the data to the left
-        num_new_datapoints = new_x.size
         x = np.roll(x, -num_new_datapoints)
         y = np.roll(y, -num_new_datapoints)
         # Add the most recent data to the end of the array
         x[-num_new_datapoints:] = new_x
         y[-num_new_datapoints:] = new_y
-        # Update the curve
+        # Update the data
         self.setData(x, y)
 
 
@@ -57,8 +79,8 @@ if __name__ == '__main__':
     plot1.addItem(dataitem)
 
     def update_plot1():
-        new_y = np.asarray(np.random.normal())
-        new_x = np.asarray(dataitem.xData[-1] + 1)
+        new_y = np.random.normal()
+        new_x = dataitem.xData[-1] + 1
         dataitem.update_data(new_x, new_y)
 
     timer = pg.QtCore.QTimer()
@@ -71,14 +93,13 @@ if __name__ == '__main__':
     plot2.addItem(scatteritem)
 
     def update_plot2():
-        new_a = np.asarray(np.random.normal())
-        new_b = np.asarray(np.random.normal())
+        new_a = np.random.normal()
+        new_b = np.random.normal()
         scatteritem.update_data(new_a, new_b)
 
     timer2 = pg.QtCore.QTimer()
     timer2.timeout.connect(update_plot2)
     timer2.start(50)
-
 
     if (sys.flags.interactive != 1) or not hasattr(QtCore, 'PYQT_VERSION'):
         QtGui.QApplication.instance().exec_()
