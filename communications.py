@@ -91,7 +91,9 @@ class StreamingSocket:
     def __init__(self):
         self.part_packet = b''
         self.read_buffer = b''
+        self.create_socket()
 
+    def create_socket(self):
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 
@@ -148,9 +150,19 @@ class StreamingSocket:
             return b''
 
     def write(self, data_source, data):
-        packet = encode(data_source, data)
-        self.connection.send(packet)
-
+        try:
+            packet = encode(data_source, data)
+            self.connection.send(packet)
+        except socket.error as e:
+            # Connection reset error
+            # TODO: I don't think this works
+            if e.errno == errno.ECONNRESET:
+                print("Connection reset. Attempting to reconnect...")
+                self.connect()
+            # All other errors
+            else:
+                raise
+                
     def connect(self):
         return
 
@@ -186,6 +198,8 @@ class ClientSocket(StreamingSocket):
 
     def connect(self):
         try:
+            self.create_socket()            
+            
             print("Connecting to server...")
 
             self.socket.connect((self.server_address, self.server_port))
@@ -194,7 +208,7 @@ class ClientSocket(StreamingSocket):
                   .format(self.server_address, self.server_port))
 
         except Exception as e:
-            print("Exception ocurred: {}".format(Exception))
+            print("Exception ocurred: {}".format(e))
 
             if self.retry_connection:
                 if not hasattr(self, 'start_time'):
@@ -204,6 +218,11 @@ class ClientSocket(StreamingSocket):
 
                 while (time.time() - self.start_time) < self.timeout:
                     self.connect()
+    
+    def disconnect(self):
+        print("Disconnecting...")
+        #self.socket.shutdown()
+        self.socket.close()
 
 
 ########################################################################

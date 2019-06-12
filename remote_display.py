@@ -6,89 +6,101 @@ import time
 import communications as com
 
 
-class Main(QtCore.QObject):
-    def __init__(self, parent=None,
-                 accelerometer_data_items=None,
-                 magnetometer_data_items=None,
-                 gyroscope_data_items=None,
-                 barometer_data_item=None):
+class ConnectionHandler(QtCore.QObject):
+
+    def __init__(self, parent=None):
         super().__init__(parent)
+        self.connected = False
+        self.client = com.ClientSocket()
+
+    @QtCore.pyqtSlot(str, int)
+    def connect(self, address, port):
+        if not self.connected:
+            self.client.server_address = address
+            self.client.server_port = port
+            self.client.connect()
+            self.connected = True
+
+    @QtCore.pyqtSlot()
+    def disconnect(self):
+        if self.connected:
+            self.client.disconnect()
+            self.connected = False
+
+
+class DataReceiver(QtCore.QObject):
+    
+    start_signal = QtCore.pyqtSignal()    
+    
+    def __init__(self, parent, connection_handler, accelerometer_data_items, magnetometer_data_items, gyroscope_data_items, barometer_data_item):
+        super().__init__(parent)
+        self.connection_handler = connection_handler
         self.accelerometer_data_items = accelerometer_data_items
         self.magnetometer_data_items = magnetometer_data_items
         self.gyroscope_data_items = gyroscope_data_items
         self.barometer_data_item = barometer_data_item
 
     @QtCore.pyqtSlot()
-    def execute(self):
+    def receive_data(self):
+        print("Starting the 'receive data' loop")
         time_zero = time.time()
-
-        self.client = com.ClientSocket()
-        self.client.connect()
-
         while True:
-            packets = self.client.read()
-            for packet in packets:
-                if packet:
-                    print(packet)
-                    packet_length, data_source, data = packet
-                    timestamp = time.time() - time_zero
-                    if data_source == com.ACCELEROMETER_ID:
-                        self.accelerometer_data_items['x'].update_data(timestamp, data[0])
-                        self.accelerometer_data_items['y'].update_data(timestamp, data[1])
-                        self.accelerometer_data_items['z'].update_data(timestamp, data[2])
-                    elif data_source == com.MAGNETOMETER_ID:
-                        self.magnetometer_data_items['x'].update_data(timestamp, data[0])
-                        self.magnetometer_data_items['y'].update_data(timestamp, data[1])
-                        self.magnetometer_data_items['z'].update_data(timestamp, data[2])                       
-                    elif data_source == com.GYROSCOPE_ID:
-                        self.gyroscope_data_items['x'].update_data(timestamp, data[0])
-                        self.gyroscope_data_items['y'].update_data(timestamp, data[1])
-                        self.gyroscope_data_items['z'].update_data(timestamp, data[2])
-                    elif data_source == com.BAROMETER_ID:
-                        self.barometer_data_item.update_data(timestamp, data[0])
+            if self.connection_handler.connected:
+                packets = self.connection_handler.client.read()
+                for packet in packets:
+                    if packet:
+                        print(packet)
+                        packet_length, data_source, data = packet
+                        timestamp = time.time() - time_zero
+                        if data_source == com.ACCELEROMETER_ID:
+                            self.accelerometer_data_items['x'].update_data(timestamp, data[0])
+                            self.accelerometer_data_items['y'].update_data(timestamp, data[1])
+                            self.accelerometer_data_items['z'].update_data(timestamp, data[2])
+                        elif data_source == com.MAGNETOMETER_ID:
+                            self.magnetometer_data_items['x'].update_data(timestamp, data[0])
+                            self.magnetometer_data_items['y'].update_data(timestamp, data[1])
+                            self.magnetometer_data_items['z'].update_data(timestamp, data[2])                       
+                        elif data_source == com.GYROSCOPE_ID:
+                            self.gyroscope_data_items['x'].update_data(timestamp, data[0])
+                            self.gyroscope_data_items['y'].update_data(timestamp, data[1])
+                            self.gyroscope_data_items['z'].update_data(timestamp, data[2])
+                        elif data_source == com.BAROMETER_ID:
+                            self.barometer_data_item.update_data(timestamp, data[0])
 
 
-class RemoteDisplayApplication(QtGui.QMainWindow):
+class RemoteDisplayWindow(QtGui.QMainWindow):
+    connect_signal = QtCore.pyqtSignal(str, int)        
+    disconnect_signal = QtCore.pyqtSignal()
+    
     def __init__(self, parent=None):
-        super(RemoteDisplayApplication, self).__init__(parent)
+        super().__init__(parent)
 
-        self.setWindowTitle('Remote Display')
-        self.resize(650, 800)
-
-        self.main_widget = QtGui.QWidget()
-        self.setCentralWidget(self.main_widget)
+        # Address label
+        self.address_label = QtGui.QLabel("Server:")
+        self.address_label.setAlignment(QtCore.Qt.AlignRight |
+                                       QtCore.Qt.AlignVCenter)
         
-        #        0        1        2        3        4       5
-        #   |-----------------------------------------------------|
-        # 0 |        |        |        |        |        | Connect|
-        #   |-----------------------------------------------------|
-        # 1 |      Accelerometer       |         Gyroscope        |
-        #   |-----------------------------------------------------|
-        # 2 |       Magnetometer       |         Barometer        |
-        #   |-----------------------------------------------------|
-        # 3 |   XY   |   YZ   |   ZX   |        |        |        | 
-        #   |-----------------------------------------------------|
-        self.grid = QtGui.QGridLayout()
-        self.grid.setRowMinimumHeight(0, 50)
-        self.grid.setRowMinimumHeight(1, 200)
-        self.grid.setRowMinimumHeight(2, 200)
-        #self.grid.setRowMinimumHeight(3, 200)
-        self.grid.setColumnMinimumWidth(0, 200)
-        self.grid.setColumnMinimumWidth(1, 200)
-        self.grid.setColumnMinimumWidth(2, 200)
-        self.grid.setColumnMinimumWidth(3, 200)
-        self.grid.setColumnMinimumWidth(4, 200)
-        self.grid.setColumnMinimumWidth(5, 200)
-        self.grid.setSpacing(10)
-        self.main_widget.setLayout(self.grid)
+        # Address bar
+        self.address_bar = QtGui.QLineEdit()
+        # Create a regex for the IP address
+        ip_values = "(?:[0-1]?[0-9]?[0-9]|2[0-4][0-9]|25[0-5])"
+        ip_regex = QtCore.QRegExp("^" + ip_values + "\\." + ip_values + "\\."
+                                  + ip_values + "\\." + ip_values + "$")
+        self.address_bar.setValidator(QtGui.QRegExpValidator(ip_regex, self))
+        self.address_bar.setText("192.168.42.1")
+        
+        # Port bar
+        self.port_bar = QtGui.QLineEdit()
+        self.port_bar.setValidator(QtGui.QIntValidator())
+        self.port_bar.setText("12345")
 
         # Connect button
         self.connect_button = QtGui.QPushButton("&Connect")
-        self.grid.addWidget(self.connect_button, 0, 5)
+        self.connect_button.clicked.connect(self.toggle_connect)
+        self.connected = False
 
         # Accelerometer plot
         self.accelerometer_plotwidget = pg.PlotWidget(title='Accelerometer')
-        self.grid.addWidget(self.accelerometer_plotwidget, 1, 0, 1, 3)
 
         self.accelerometer_plotwidget.plot()
         self.accelerometer_plotwidget.enableAutoRange()
@@ -104,7 +116,6 @@ class RemoteDisplayApplication(QtGui.QMainWindow):
         
         # Magnetometer plot
         self.magnetometer_plotwidget = pg.PlotWidget(title='Magnetometer')
-        self.grid.addWidget(self.magnetometer_plotwidget, 2, 0, 1, 3)
 
         self.magnetometer_plotwidget.plot()
         self.magnetometer_plotwidget.enableAutoRange()
@@ -121,7 +132,6 @@ class RemoteDisplayApplication(QtGui.QMainWindow):
 
         # Gyroscope plot
         self.gyroscope_plotwidget = pg.PlotWidget(title='Gyroscope')
-        self.grid.addWidget(self.gyroscope_plotwidget, 1, 3, 1, 3)
 
         self.gyroscope_plotwidget.plot()
         self.gyroscope_plotwidget.enableAutoRange()
@@ -138,7 +148,6 @@ class RemoteDisplayApplication(QtGui.QMainWindow):
 
         # Barometer plot
         self.barometer_plotwidget = pg.PlotWidget(title='Barometer')
-        self.grid.addWidget(self.barometer_plotwidget, 2, 3, 1, 3)
 
         self.barometer_plotwidget.plot()
         self.barometer_plotwidget.enableAutoRange()
@@ -171,18 +180,88 @@ class RemoteDisplayApplication(QtGui.QMainWindow):
 #            self.orientation_data[key] = plt.UpdatingDataItem(symbol='o')
 #            widget.addItem(self.orientation_data[key])
 
-        # Main thread
-        self.main = Main(accelerometer_data_items=self.accelerometer_data_items,
-                         magnetometer_data_items=self.magnetometer_data_items,
-                         gyroscope_data_items=self.gyroscope_data_items,
-                         barometer_data_item=self.barometer_data_item)
-        self.main_thread = QtCore.QThread()
-        self.main.moveToThread(self.main_thread)
-        self.main_thread.start()
-        self.connect_button.clicked.connect(self.main.execute)        
+        # Connection handler thread
+        # Create the connection handler object
+        self.connection_handler = ConnectionHandler()
+        # Create a thread for it
+        self.connection_handler_thread = QtCore.QThread()
+        self.connection_handler.moveToThread(self.connection_handler_thread)
+        # Connect some asynchronous slots
+        self.connect_signal.connect(self.connection_handler.connect)
+        self.disconnect_signal.connect(self.connection_handler.disconnect) 
+        # Start the thread
+        self.connection_handler_thread.start()
+       
+        # Data receiving thread
+        # Create the connection handler object
+        self.data_receiver = DataReceiver(None, self.connection_handler,  self.accelerometer_data_items, self.magnetometer_data_items, self.gyroscope_data_items, self.barometer_data_item)
+        # Create a thread for it
+        self.data_receiver_thread = QtCore.QThread()
+        self.data_receiver.moveToThread(self.data_receiver_thread)
+        self.data_receiver_thread.started.connect(self.data_receiver.receive_data)
+        # Start the thread        
+        self.data_receiver_thread.start()
+        
+        # GUI:
+        #        0        1        2        3        4       5
+        #   |-----------------------------------------------------|
+        # 0 |        |        | Label  | Address|  Port  | Connect|
+        #   |-----------------------------------------------------|
+        # 1 |      Accelerometer       |         Gyroscope        |
+        #   |-----------------------------------------------------|
+        # 2 |       Magnetometer       |         Barometer        |
+        #   |-----------------------------------------------------|
+        # 3 |   XY   |   YZ   |   ZX   |        |        |        | 
+        #   |-----------------------------------------------------|
+        self.setWindowTitle('Remote Display')
+        self.resize(650, 800)
+
+        self.main_widget = QtGui.QWidget()
+        self.setCentralWidget(self.main_widget)
+        
+        self.grid = QtGui.QGridLayout()
+        self.grid.setRowMinimumHeight(0, 50)
+        self.grid.setRowMinimumHeight(1, 200)
+        self.grid.setRowMinimumHeight(2, 200)
+        #self.grid.setRowMinimumHeight(3, 200)
+        self.grid.setColumnMinimumWidth(0, 200)
+        self.grid.setColumnMinimumWidth(1, 200)
+        self.grid.setColumnMinimumWidth(2, 200)
+        self.grid.setColumnMinimumWidth(3, 200)
+        self.grid.setColumnMinimumWidth(4, 200)
+        self.grid.setColumnMinimumWidth(5, 200)
+        self.grid.setSpacing(10)
+        self.main_widget.setLayout(self.grid)
+        
+        self.grid.addWidget(self.address_label, 0, 2)
+        self.grid.addWidget(self.address_bar, 0, 3)
+        self.grid.addWidget(self.port_bar, 0, 4)
+        self.grid.addWidget(self.connect_button, 0, 5)
+        self.grid.addWidget(self.accelerometer_plotwidget, 1, 0, 1, 3)
+        self.grid.addWidget(self.magnetometer_plotwidget, 2, 0, 1, 3)
+        self.grid.addWidget(self.gyroscope_plotwidget, 1, 3, 1, 3)
+        self.grid.addWidget(self.barometer_plotwidget, 2, 3, 1, 3)
+
+
+    def toggle_connect(self):
+        if self.connection_handler.connected:
+            self.disconnect_signal.emit()
+            self.connect_button.setText("&Connect")
+            self.address_bar.setEnabled(True)
+            self.port_bar.setEnabled(True)
+        else:
+            address = self.address_bar.text()
+            port = int(self.port_bar.text())
+            self.connect_signal.emit(address, port)
+            self.connect_button.setText("Dis&connect")
+            self.address_bar.setEnabled(False)
+            self.port_bar.setEnabled(False)
 
 if __name__ == '__main__':
-    app = QtGui.QApplication(sys.argv)
-    window = RemoteDisplayApplication()
+    app = QtGui.QApplication.instance()
+    if not app:
+        app = QtGui.QApplication(sys.argv)
+    app.aboutToQuit.connect(app.deleteLater)
+    window = RemoteDisplayWindow()
     window.show()
-    app.exec_()
+    sys.exit(app.exec_())
