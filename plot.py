@@ -24,15 +24,18 @@ class UpdatingDataItem(pg.PlotDataItem):
         self.setSymbolPen(None)
         self.setSymbolBrush(DEFAULT_BRUSH)
         self.setSymbolSize(DEFAULT_SPOT_SIZE)
-        if self.opts['symbol'] is not None:
-            # Disable line if it's a scatter plot
-            self.setPen(None)
-        else:
-            self.setPen(DEFAULT_PEN)
-        
+        # Any pen opts will override the defaults
+        if self.opts['pen'] is None:
+            if self.opts['symbol'] is not None:
+                # Disable line if it's a scatter plot
+                self.setPen(None)
+            else:
+                self.setPen(DEFAULT_PEN)
+
         # If initialised with no data, initialise with a blank buffer
         if self.getData()[0] is None:
-            self.setData(np.zeros(display_buffer_size), np.zeros(display_buffer_size))
+            self.setData(np.zeros(display_buffer_size),
+                         np.zeros(display_buffer_size))
 
     def update_data(self, new_x, new_y):
         # Check input data and find number of new datapoints
@@ -61,6 +64,46 @@ class UpdatingDataItem(pg.PlotDataItem):
         self.setData(x, y)
 
 
+###############################################################################
+## Updating plot widget ##
+##########################
+class UpdatingPlotWidget(pg.PlotWidget):
+
+    def __init__(self, *args, **kwargs):
+
+        super().__init__(*args, **kwargs)
+
+        self.setMouseEnabled(False, False)
+        self.enableAutoRange()
+        self.showGrid(x=True, y=True)
+
+    def add_item(self, item_name, *args, **kwargs):
+        """
+        Add an UpdatingDataItem to the plot.
+        `item_name` is used to identify the new item.
+        """
+        self.addItem(UpdatingDataItem(*args, name=item_name, **kwargs))
+
+    def get_item(self, item_name):
+        """
+        Return the item in this plot with the given item_name
+        """
+        for item in self.listDataItems():
+            if item.name() == item_name:
+                return item
+
+    def get_items(self, item_names):
+        """
+        Return the item in this plot with the names given in item_names
+        """
+        items = []
+        for item in self.listDataItems():
+            if item.name() in item_names:
+                items.append(item)
+        return items
+
+
+###############################################################################
 if __name__ == '__main__':
     import sys
 
