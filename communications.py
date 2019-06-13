@@ -108,7 +108,7 @@ class StreamingSocket:
             self.buffer = b''
             # Connection reset error
             # TODO: I don't think this works
-            if e.errno == errno.ECONNRESET:
+            if e.errno == errno.ECONNRESET or e.errno == errno.EPIPE:
                 print("Connection reset. Attempting to reconnect...")
                 self.connect()
             # All other errors
@@ -156,7 +156,7 @@ class StreamingSocket:
         except socket.error as e:
             # Connection reset error
             # TODO: I don't think this works
-            if e.errno == errno.ECONNRESET:
+            if e.errno == errno.ECONNRESET or e.errno == errno.EPIPE:
                 print("Connection reset. Attempting to reconnect...")
                 self.connect()
             # All other errors
