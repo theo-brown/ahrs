@@ -215,6 +215,8 @@ class ClientSocket(StreamingSocket):
                     self.start_time = time.time()
 
                 print("Retrying.")
+                
+                time.sleep(1)
 
                 while (time.time() - self.start_time) < self.timeout:
                     self.connect()
