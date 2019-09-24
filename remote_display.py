@@ -207,17 +207,26 @@ class MainWindow(QtGui.QMainWindow):
         if data_source == com.BAROMETER_ID:
             self.plot_widgets['barometer'].get_item('altitude').update_data(t, values[0])
         elif data_source == com.ACCELEROMETER_ID:
-            self.plot_widgets['accelerometer'].get_item('x').update_data(t, values[0])
-            self.plot_widgets['accelerometer'].get_item('y').update_data(t, values[1])
-            self.plot_widgets['accelerometer'].get_item('z').update_data(t, values[2])
+            if len(values) < 3:
+                print("Error: Expected 3 values for accelerometer data, got {}".format(len(values)))
+            else:
+                self.plot_widgets['accelerometer'].get_item('x').update_data(t, values[0])
+                self.plot_widgets['accelerometer'].get_item('y').update_data(t, values[1])
+                self.plot_widgets['accelerometer'].get_item('z').update_data(t, values[2])
         elif data_source == com.MAGNETOMETER_ID:
-            self.plot_widgets['magnetometer'].get_item('x').update_data(t, values[0])
-            self.plot_widgets['magnetometer'].get_item('y').update_data(t, values[1])
-            self.plot_widgets['magnetometer'].get_item('z').update_data(t, values[2])
+            if len(values) < 3:
+                print("Error: Expected 3 values for accelerometer data, got {}".format(len(values)))
+            else:
+                self.plot_widgets['magnetometer'].get_item('x').update_data(t, values[0])
+                self.plot_widgets['magnetometer'].get_item('y').update_data(t, values[1])
+                self.plot_widgets['magnetometer'].get_item('z').update_data(t, values[2])
         elif data_source == com.GYROSCOPE_ID:
-            self.plot_widgets['gyroscope'].get_item('x').update_data(t, values[0])
-            self.plot_widgets['gyroscope'].get_item('y').update_data(t, values[1])
-            self.plot_widgets['gyroscope'].get_item('z').update_data(t, values[2])
+            if len(values) < 3:
+                print("Error: Expected 3 values for accelerometer data, got {}".format(len(values)))
+            else:
+                self.plot_widgets['gyroscope'].get_item('x').update_data(t, values[0])
+                self.plot_widgets['gyroscope'].get_item('y').update_data(t, values[1])
+                self.plot_widgets['gyroscope'].get_item('z').update_data(t, values[2])
 
 
 ###############################################################################
@@ -282,4 +291,5 @@ class DataReceiver(QtCore.QObject):
 ##########
 if __name__ == "__main__":
     app = RemoteDisplayApplication(sys.argv)
+    app.exec_()
         
