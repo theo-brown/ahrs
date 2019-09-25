@@ -3,6 +3,7 @@ import time
 from pyqtgraph.Qt import QtGui, QtCore
 import plot as plt
 import communications as com
+from kalman_filter import KalmanFilter
 
 
 ###############################################################################
@@ -113,6 +114,8 @@ class MainWindow(QtGui.QMainWindow):
         for name, widget in self.plot_widgets.items():
             if name == 'barometer':
                 widget.add_item('altitude', pen='k')
+                widget.add_item('filtered', pen='r')
+                self.filter1 = KalmanFilter(x_prior=0, P_prior=2, A=1, B=0, H=1, Q=0.005, R=1.02958)
             else:
                 widget.add_item('x', pen='r')
                 widget.add_item('y', pen='g')
@@ -206,6 +209,7 @@ class MainWindow(QtGui.QMainWindow):
         t = time.time() - self.time_zero
         if data_source == com.BAROMETER_ID:
             self.plot_widgets['barometer'].get_item('altitude').update_data(t, values[0])
+            self.plot_widgets['barometer'].get_item('filtered').update_data(t, self.filter1.update(u_input=0, z_measurement=values[0])[0])
         elif data_source == com.ACCELEROMETER_ID:
             if len(values) < 3:
                 print("Error: Expected 3 values for accelerometer data, got {}".format(len(values)))
@@ -215,14 +219,14 @@ class MainWindow(QtGui.QMainWindow):
                 self.plot_widgets['accelerometer'].get_item('z').update_data(t, values[2])
         elif data_source == com.MAGNETOMETER_ID:
             if len(values) < 3:
-                print("Error: Expected 3 values for accelerometer data, got {}".format(len(values)))
+                print("Error: Expected 3 values for magnetometer data, got {}".format(len(values)))
             else:
                 self.plot_widgets['magnetometer'].get_item('x').update_data(t, values[0])
                 self.plot_widgets['magnetometer'].get_item('y').update_data(t, values[1])
                 self.plot_widgets['magnetometer'].get_item('z').update_data(t, values[2])
         elif data_source == com.GYROSCOPE_ID:
             if len(values) < 3:
-                print("Error: Expected 3 values for accelerometer data, got {}".format(len(values)))
+                print("Error: Expected 3 values for gyroscope data, got {}".format(len(values)))
             else:
                 self.plot_widgets['gyroscope'].get_item('x').update_data(t, values[0])
                 self.plot_widgets['gyroscope'].get_item('y').update_data(t, values[1])
