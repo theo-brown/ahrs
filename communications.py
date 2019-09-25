@@ -21,6 +21,7 @@ PACKET_LENGTH_BYTE = 0  # Location of packet length byte
 DATA_SOURCE_BYTE = 1  # Location of data source byte
 FIRST_DATA_BYTE = 2  # Location of first data byte
 
+ACK_ID = 0
 ACCELEROMETER_ID = 1
 MAGNETOMETER_ID = 2
 GYROSCOPE_ID = 3
@@ -233,6 +234,7 @@ if __name__ == '__main__':
         mode = input("Select mode [s]erver/[c]lient: ")
 
         if mode == 's':
+            print("This is a communications test transmission program. It does not send sensor data. Use test_data_transmission instead.")
             server = ServerSocket()
             server.connect()
             a = 1
@@ -246,6 +248,6 @@ if __name__ == '__main__':
             client.connect()
             while True:
                 print(client.read())
-                print(client.write(GYROSCOPE_ID, np.asarray(1)))
-
+                print(client.write(ACK_ID, np.asarray(1)))
+                
         print("Mode not recognised.")
