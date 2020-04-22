@@ -27,6 +27,7 @@ GPSSensor.epc = property(lambda self: self.data_stream.epc) # Climb error in m/s
 def initialise(self):
     self.stream_data()
     self.run_thread()
+    print("GPS set up.")
 
 # Assign functions as methods of GPSSensor
 GPSSensor.initialise = initialise

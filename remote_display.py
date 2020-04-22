@@ -109,13 +109,16 @@ class MainWindow(QtGui.QMainWindow):
         self.plot_widgets = {'accelerometer': plt.UpdatingPlotWidget(title='Accelerometer'),
                              'magnetometer': plt.UpdatingPlotWidget(title='Magnetometer'),
                              'gyroscope': plt.UpdatingPlotWidget(title='Gyroscope'),
-                             'barometer': plt.UpdatingPlotWidget(title='Barometer')}
+                             'barometer': plt.UpdatingPlotWidget(title='Barometer'),
+                             'gps-pos': plt.UpdatingPlotWidget(title='GPS Position')}
 
         for name, widget in self.plot_widgets.items():
             if name == 'barometer':
                 widget.add_item('altitude', pen='k')
                 widget.add_item('filtered', pen='r')
                 self.filter1 = KalmanFilter(x_prior=0, P_prior=2, A=1, B=0, H=1, Q=0.005, R=1.02958)
+            if name == 'gps-pos':
+                widget.add_item('position', pen=None, symbol='o', symbolPen='k', symbolBrush='k')
             else:
                 widget.add_item('x', pen='r')
                 widget.add_item('y', pen='g')
@@ -134,7 +137,7 @@ class MainWindow(QtGui.QMainWindow):
            |-----------------------------------------------------|
          2 |       Magnetometer       |         Barometer        |
            |-----------------------------------------------------|
-         3 |   XY   |   YZ   |   ZX   |         |      |         |
+         3 | GPS XY |        |        |         |      |         |
            |-----------------------------------------------------|
         """
         # # Window setup
@@ -152,7 +155,7 @@ class MainWindow(QtGui.QMainWindow):
         self.grid.setRowMinimumHeight(0, 50)
         self.grid.setRowMinimumHeight(1, 200)
         self.grid.setRowMinimumHeight(2, 200)
-        #self.grid.setRowMinimumHeight(3, 200)
+        self.grid.setRowMinimumHeight(3, 200)
 
         self.grid.setColumnMinimumWidth(0, 200)
         self.grid.setColumnMinimumWidth(1, 200)
@@ -170,14 +173,18 @@ class MainWindow(QtGui.QMainWindow):
         self.grid.addWidget(self.address_bar, 0, 3)
         self.grid.addWidget(self.port_bar, 0, 4)
         self.grid.addWidget(self.connect_button, 0, 5)
-        plot_locations = [(1, 0), (1, 3), (2, 0), (2, 3)]
 
-        i = 0
         for name, widget in self.plot_widgets.items():
-            self.grid.addWidget(widget,
-                                plot_locations[i][0], plot_locations[i][1],
-                                1, 3)
-            i += 1
+            if name == 'accelerometer':
+                self.grid.addWidget(widget, 1, 0, 1, 3)
+            elif name == 'gyroscope':
+                self.grid.addWidget(widget, 1, 3, 1, 3)            
+            elif name == 'magnetometer':
+                self.grid.addWidget(widget, 2, 0, 1, 3)
+            elif name == 'barometer':
+                self.grid.addWidget(widget, 2, 3, 1, 3)
+            elif name == 'gps-pos':
+                self.grid.addWidget(widget, 3, 0, 1, 1)
 
     @QtCore.pyqtSlot()
     def _toggle_connect(self):
@@ -231,6 +238,11 @@ class MainWindow(QtGui.QMainWindow):
                 self.plot_widgets['gyroscope'].get_item('x').update_data(t, values[0])
                 self.plot_widgets['gyroscope'].get_item('y').update_data(t, values[1])
                 self.plot_widgets['gyroscope'].get_item('z').update_data(t, values[2])
+        elif data_source == com.GPS_ID:
+            if len(values) < 2:
+                print("Error: Expected 2 values for GPS position, got {}".format(len(values)))
+            else:
+                self.plot_widgets['gps-pos'].get_item('position').update_data(values[0], values[1])
 
 
 ###############################################################################
