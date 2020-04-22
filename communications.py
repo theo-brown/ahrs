@@ -36,11 +36,11 @@ READ_BUFFER_SIZE = 1024
 
 def encode(data_source, data):
     # Set source byte
-    if data_source in DATA_SOURCE_BYTES:
+    if data_source in DATA_SOURCE_BYTES or data_source == ACK_ID:
         source_byte = data_source
     else:
-        raise Exception("Data source {} not recognised (must be one of {})"
-                        .format(data_source, DATA_SOURCE_BYTES))
+        raise Exception("Data source {} not recognised (must be one of {}, or ACK bit ({}}))"
+                        .format(data_source, DATA_SOURCE_BYTES, ACK_ID))
 
     # If it's a scalar, size is 1
     if np.ndim(data) == 0:
