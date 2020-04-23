@@ -117,8 +117,8 @@ class MainWindow(QtGui.QMainWindow):
                 widget.add_item('altitude', pen='k')
                 widget.add_item('filtered', pen='r')
                 self.filter1 = KalmanFilter(x_prior=0, P_prior=2, A=1, B=0, H=1, Q=0.005, R=1.02958)
-            if name == 'gps-pos':
-                widget.add_item('position', pen=None, symbol='o', symbolPen='k', symbolBrush='k')
+            elif name == 'gps-pos':
+                widget.add_item('position', symbol='o')
             else:
                 widget.add_item('x', pen='r')
                 widget.add_item('y', pen='g')
