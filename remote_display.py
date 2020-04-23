@@ -116,6 +116,7 @@ class MainWindow(QtGui.QMainWindow):
             if name == 'barometer':
                 widget.add_item('altitude', pen='k')
                 widget.add_item('filtered', pen='r')
+                widget.add_item('altitude_gps', pen='b')
                 self.filter1 = KalmanFilter(x_prior=0, P_prior=2, A=1, B=0, H=1, Q=0.005, R=1.02958)
             elif name == 'gps-pos':
                 widget.add_item('position', symbol='o')
@@ -214,35 +215,40 @@ class MainWindow(QtGui.QMainWindow):
         data_source = received_data[0]
         values = received_data[1]
         t = time.time() - self.time_zero
-        if data_source == com.BAROMETER_ID:
+        if data_source == com.BAROMETER_UNFILTERED_ID:
             self.plot_widgets['barometer'].get_item('altitude').update_data(t, values[0])
             self.plot_widgets['barometer'].get_item('filtered').update_data(t, self.filter1.update(u_input=0, z_measurement=values[0])[0])
         elif data_source == com.ACCELEROMETER_ID:
-            if len(values) < 3:
+            if len(values) != 3:
                 print("Error: Expected 3 values for accelerometer data, got {}".format(len(values)))
             else:
                 self.plot_widgets['accelerometer'].get_item('x').update_data(t, values[0])
                 self.plot_widgets['accelerometer'].get_item('y').update_data(t, values[1])
                 self.plot_widgets['accelerometer'].get_item('z').update_data(t, values[2])
         elif data_source == com.MAGNETOMETER_ID:
-            if len(values) < 3:
+            if len(values) != 3:
                 print("Error: Expected 3 values for magnetometer data, got {}".format(len(values)))
             else:
                 self.plot_widgets['magnetometer'].get_item('x').update_data(t, values[0])
                 self.plot_widgets['magnetometer'].get_item('y').update_data(t, values[1])
                 self.plot_widgets['magnetometer'].get_item('z').update_data(t, values[2])
         elif data_source == com.GYROSCOPE_ID:
-            if len(values) < 3:
+            if len(values) != 3:
                 print("Error: Expected 3 values for gyroscope data, got {}".format(len(values)))
             else:
                 self.plot_widgets['gyroscope'].get_item('x').update_data(t, values[0])
                 self.plot_widgets['gyroscope'].get_item('y').update_data(t, values[1])
                 self.plot_widgets['gyroscope'].get_item('z').update_data(t, values[2])
-        elif data_source == com.GPS_ID:
-            if len(values) < 2:
+        elif data_source == com.GPS_POS_ID:
+            if len(values) != 2:
                 print("Error: Expected 2 values for GPS position, got {}".format(len(values)))
             else:
                 self.plot_widgets['gps-pos'].get_item('position').update_data(values[0], values[1])
+        elif data_source == com.GPS_ALT_ID:
+            if len(values) != 1:
+                print("Error: Expected 1 value for GPS altitude, got {}".format(len(values)))
+            else:
+                self.plot_widgets['barometer'].get_item('altitude_gps').update_data(t, values[0])
 
 
 ###############################################################################

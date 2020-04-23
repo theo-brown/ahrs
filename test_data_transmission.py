@@ -35,8 +35,10 @@ try:
         server.write(com.ACCELEROMETER_ID, np.asarray(accelerometer1.read_acc()))
         server.write(com.MAGNETOMETER_ID, np.asarray(accelerometer1.read_mag()))
         server.write(com.GYROSCOPE_ID, np.asarray(gyroscope1.read()))
-        server.write(com.BAROMETER_ID, np.asarray(barometer1.read_relative_altitude()))
-        server.write(com.GPS_ID, np.asarray([gps1.lat, gps1.lon]))
+        server.write(com.BAROMETER_UNFILTERED_ID, np.asarray(barometer1.read_relative_altitude()))
+        # TODO fix so that GPS only sends when it's got a new value
+        server.write(com.GPS_POS_ID, np.asarray([gps1.lat, gps1.lon]))
+        server.write(com.GPS_ALT_ID, np.asarray(gps1.alt))
         sleep(1/25)
 
 except KeyboardInterrupt:
