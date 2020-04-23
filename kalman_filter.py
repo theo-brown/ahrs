@@ -71,7 +71,6 @@ if __name__=='__main__':
     # Kalman Filter', University of North Carolina, Jul 2006
 
     import matplotlib.pyplot as plt
-    import numpy as np
 
     filt = KalmanFilter(0, 1, 1, 0, 1, 1e-5, 1)
     n = 100
